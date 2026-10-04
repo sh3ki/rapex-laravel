@@ -1,0 +1,1 @@
+import RoleAuthForm from '@/components/auth/role-auth-form'; export default function Page(p: { role?: string; token: string; email: string; passwordRules?: string }) { return <RoleAuthForm role={p.role || 'rider'} mode="reset" {...p} />; }

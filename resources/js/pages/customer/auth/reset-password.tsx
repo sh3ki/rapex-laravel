@@ -1,0 +1,1 @@
+import RoleAuthForm from '@/components/auth/role-auth-form'; export default function Page({ role = 'customer', token, email, passwordRules }: { role?: string; token: string; email: string; passwordRules?: string }) { return <RoleAuthForm role={role} mode="reset" token={token} email={email} passwordRules={passwordRules} />; }

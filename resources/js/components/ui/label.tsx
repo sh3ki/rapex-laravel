@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils"
 
 function Label({
   className,
+  children,
   ...props
 }: React.ComponentProps<typeof LabelPrimitive.Root>) {
   return (
@@ -15,7 +16,12 @@ function Label({
         className
       )}
       {...props}
-    />
+    >
+      {React.Children.map(children, (child) => {
+        if (typeof child !== "string" || !child.includes("*")) return child
+        return child.split(/(\*)/).map((part, index) => part === "*" ? <span key={index} className="text-destructive">*</span> : part)
+      })}
+    </LabelPrimitive.Root>
   )
 }
 

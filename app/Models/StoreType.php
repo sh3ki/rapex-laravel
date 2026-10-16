@@ -11,7 +11,7 @@ class StoreType extends Model
 {
     use SoftDeletes;
 
-    protected $fillable = ['store_category_id', 'name', 'slug', 'sort_order', 'status', 'created_by', 'updated_by', 'status_changed_by'];
+    protected $fillable = ['store_category_id', 'name', 'image', 'slug', 'sort_order', 'status', 'created_by', 'updated_by', 'status_changed_by'];
 
     protected function casts(): array
     {

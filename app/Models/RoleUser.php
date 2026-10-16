@@ -19,7 +19,7 @@ abstract class RoleUser extends Authenticatable implements CanResetPasswordContr
     use CanResetPassword, Notifiable, SoftDeletes;
 
     public const STATUSES = [
-        'pending', 'active', 'inactive', 'suspended', 'banned', 'deactivated', 'deleted',
+        'pending', 'active', 'inactive', 'suspended', 'banned', 'deactivated', 'rejected', 'deleted',
     ];
 
     protected $appends = ['avatar'];

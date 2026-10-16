@@ -1,5 +1,6 @@
 import { Link } from '@inertiajs/react';
 import { ChevronRight } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import {
     Collapsible,
     CollapsibleContent,
@@ -14,6 +15,36 @@ import {
 } from '@/components/ui/sidebar';
 import { useCurrentUrl } from '@/hooks/use-current-url';
 import type { NavItem } from '@/types';
+
+const SIDEBAR_NAV_STATE_KEY = 'rapex-sidebar-nav-state';
+
+function readSidebarNavState(): Record<string, boolean> {
+    if (typeof window === 'undefined') {
+        return {};
+    }
+
+    try {
+        const stored = window.localStorage.getItem(SIDEBAR_NAV_STATE_KEY);
+
+        return stored ? JSON.parse(stored) : {};
+    } catch {
+        return {};
+    }
+}
+
+function writeSidebarNavState(key: string, open: boolean) {
+    if (typeof window === 'undefined') {
+        return;
+    }
+
+    try {
+        const state = readSidebarNavState();
+        state[key] = open;
+        window.localStorage.setItem(SIDEBAR_NAV_STATE_KEY, JSON.stringify(state));
+    } catch {
+        // Storage may be unavailable in private browsing or when disabled.
+    }
+}
 
 export function SidebarNavItem({ item }: { item: NavItem }) {
     const { isCurrentOrParentUrl } = useCurrentUrl();
@@ -53,9 +84,32 @@ function SidebarNavItemWithChildren({
     isActive: boolean;
 }) {
     const { isCurrentUrl } = useCurrentUrl();
+    const storageKey = String(item.href);
+    const [open, setOpen] = useState(true);
+    const [hasLoadedStoredState, setHasLoadedStoredState] = useState(false);
+
+    useEffect(() => {
+        const storedState = readSidebarNavState();
+
+        if (typeof storedState[storageKey] === 'boolean') {
+            setOpen(storedState[storageKey]);
+        }
+
+        setHasLoadedStoredState(true);
+    }, [storageKey]);
+
+    useEffect(() => {
+        if (hasLoadedStoredState) {
+            writeSidebarNavState(storageKey, open);
+        }
+    }, [hasLoadedStoredState, open, storageKey]);
 
     return (
-        <Collapsible defaultOpen={isActive} className="group/collapsible">
+        <Collapsible
+            open={open}
+            onOpenChange={setOpen}
+            className="group/collapsible"
+        >
             <SidebarMenuItem>
                 <CollapsibleTrigger asChild>
                     <SidebarMenuButton

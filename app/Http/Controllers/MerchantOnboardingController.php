@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Admin;
 use App\Models\Merchant;
 use App\Models\MerchantOnboardingApplication;
+use App\Models\MerchantProfileEditRequest;
 use App\Models\Rider;
 use App\Models\Superadmin;
 use App\Models\User;
@@ -34,9 +35,21 @@ class MerchantOnboardingController extends Controller
             return to_route('role.dashboard', ['role' => 'merchant']);
         }
 
+        $applicationData = $application?->toArray();
+        if ($application) {
+            $applicationData['media'] = collect(self::IMAGE_FIELDS)
+                ->mapWithKeys(fn (string $field): array => [
+                    $field => ($field === 'profile_image'
+                        ? ($merchant->profile_image ?: $application->{$field})
+                        : $application->{$field})
+                        ? route('merchant.onboarding.media', ['field' => $field])
+                        : null,
+                ])->all();
+        }
+
         return Inertia::render('merchant/onboarding', [
             'merchant' => $merchant->only(['id', 'first_name', 'middle_name', 'last_name', 'email', 'phone_number']),
-            'application' => $application,
+            'application' => $applicationData,
             'googleMapsApiKey' => config('services.google.maps_api_key'),
         ]);
     }
@@ -49,7 +62,7 @@ class MerchantOnboardingController extends Controller
             'first_name' => ['required', 'string', 'max:100'], 'middle_name' => ['nullable', 'string', 'max:100'], 'last_name' => ['required', 'string', 'max:100'],
             'date_of_birth' => ['required', 'date', 'before:today'], 'gender' => ['required', Rule::in(['male', 'female', 'non-binary', 'other', 'prefer-not-to-say'])], 'nationality' => ['required', 'string', 'max:100'],
             'house_unit_building' => ['required', 'string', 'max:150'], 'street' => ['required', 'string', 'max:150'], 'barangay' => ['required', 'string', 'max:100'],
-            'city_municipality' => ['required', 'string', 'max:100'], 'province' => ['required', 'string', 'max:100'], 'region' => ['required', 'string', 'max:100'], 'postal_code' => ['required', 'string', 'max:20'],
+            'city_municipality' => ['required', 'string', 'max:100'], 'province' => ['required', 'string', 'max:100'], 'region' => ['required', 'string', 'max:100'], 'zip_code' => ['required', 'string', 'max:20'],
             'latitude' => ['required', 'numeric', 'between:-90,90'], 'longitude' => ['required', 'numeric', 'between:-180,180'],
             'id_type' => ['required', Rule::in(['National ID (PhilSys)', "Driver's License", 'Passport', 'UMID', 'Postal ID', 'SSS ID', 'PhilHealth ID', 'PRC ID', 'TIN ID', "Voter's ID", 'NBI Clearance', 'Other Government-Issued ID'])],
             'profile_image' => ['nullable', 'image', 'max:1024'], 'id_front_image' => ['required', 'image', 'max:1024'], 'id_back_image' => ['required', 'image', 'max:1024'], 'selfie_image' => ['required', 'image', 'max:1024'],
@@ -89,7 +102,9 @@ class MerchantOnboardingController extends Controller
     {
         $merchant = auth('merchant')->user();
         abort_unless($merchant instanceof Merchant && in_array($field, self::IMAGE_FIELDS, true), 403);
-        $path = $merchant->onboardingApplication?->{$field};
+        $path = $field === 'profile_image'
+            ? ($merchant->profile_image ?: $merchant->onboardingApplication?->{$field})
+            : $merchant->onboardingApplication?->{$field};
         abort_unless($path && Storage::disk('local')->exists($path), 404);
 
         return Storage::disk('local')->response($path);
@@ -110,13 +125,14 @@ class MerchantOnboardingController extends Controller
 
         return Inertia::render('admin/merchant-applications', [
             'applications' => MerchantOnboardingApplication::with('merchant:id,first_name,middle_name,last_name,email,phone_number')
-                ->where('status', 'pending')
-                ->whereHas('merchant', fn ($query) => $query->where('onboarding_completed', true))
+                ->whereIn('status', ['pending', 'rejected'])
                 ->latest('submitted_at')
                 ->get()
                 ->map(fn (MerchantOnboardingApplication $application): array => [
                     'id' => $application->getKey(),
                     'status' => $application->status,
+                    'rejection_reason' => $application->rejection_reason,
+                    'reviewed_at' => $application->reviewed_at?->toISOString(),
                     'submitted_at' => $application->submitted_at?->toISOString(),
                     'profile_image' => $application->profile_image ? "/merchant-management/applications/{$application->getKey()}/media/profile_image" : null,
                     'id_front_image' => $application->id_front_image ? "/merchant-management/applications/{$application->getKey()}/media/id_front_image" : null,
@@ -131,7 +147,7 @@ class MerchantOnboardingController extends Controller
                     'city_municipality' => $application->city_municipality,
                     'province' => $application->province,
                     'region' => $application->region,
-                    'postal_code' => $application->postal_code,
+                    'zip_code' => $application->zip_code,
                     'latitude' => $application->latitude,
                     'longitude' => $application->longitude,
                     'id_type' => $application->id_type,
@@ -143,6 +159,7 @@ class MerchantOnboardingController extends Controller
                         'phone_number' => $application->merchant->phone_number,
                     ],
                 ]),
+            'editRequests' => $this->profileEditRequestsForAdmin(),
         ]);
     }
 
@@ -151,7 +168,7 @@ class MerchantOnboardingController extends Controller
         $this->authorizeReviewer($request);
 
         return Inertia::render('admin/merchant-accounts', [
-            'accounts' => Merchant::withTrashed()->where('onboarding_completed', true)->with('onboardingApplication')->latest()->get()->map(fn (Merchant $merchant): array => [
+            'accounts' => Merchant::withTrashed()->with('onboardingApplication')->latest()->get()->map(fn (Merchant $merchant): array => [
                 'id' => $merchant->getKey(),
                 'first_name' => $merchant->first_name,
                 'middle_name' => $merchant->middle_name,
@@ -174,7 +191,7 @@ class MerchantOnboardingController extends Controller
                 'city_municipality' => $merchant->onboardingApplication?->city_municipality,
                 'province' => $merchant->onboardingApplication?->province,
                 'region' => $merchant->onboardingApplication?->region,
-                'postal_code' => $merchant->onboardingApplication?->postal_code,
+                'zip_code' => $merchant->onboardingApplication?->zip_code,
                 'latitude' => $merchant->onboardingApplication?->latitude,
                 'longitude' => $merchant->onboardingApplication?->longitude,
                 'id_type' => $merchant->onboardingApplication?->id_type,
@@ -184,6 +201,97 @@ class MerchantOnboardingController extends Controller
                 'selfie_image' => $this->applicationMediaUrl($merchant, 'selfie_image'),
             ]),
         ]);
+    }
+
+    private function profileEditRequestsForAdmin(): array
+    {
+        return MerchantProfileEditRequest::query()
+            ->where('status', 'pending')
+            ->with(['merchant:id,first_name,middle_name,last_name,email,phone_number,profile_image', 'merchant.onboardingApplication'])
+            ->orderByDesc('requested_at')->get()
+            ->groupBy(fn (MerchantProfileEditRequest $edit): string => $edit->request_key ?: 'legacy-'.$edit->merchant_id.'-'.($edit->requested_at?->format('Y-m-d H:i:s')))
+            ->map(function ($edits): array {
+                $first = $edits->first();
+                return [
+                    'id' => $first->getKey(), 'status' => $first->status,
+                    'changes' => $edits->map(fn (MerchantProfileEditRequest $edit): array => ['field' => $edit->field, 'from' => $this->editValue($edit, 'from'), 'to' => $this->editValue($edit, 'to')])->values()->all(),
+                    'requested_at' => $first->requested_at?->toISOString(), 'approved_at' => $first->approved_at?->toISOString(),
+                    'approved_by' => $first->approved_by ? $this->reviewerName($first->approved_by, $first->approved_by_role) : null,
+                    'merchant' => $first->merchant ? [
+                        'name' => collect([$first->merchant->first_name, $first->merchant->middle_name, $first->merchant->last_name])->filter()->implode(' '),
+                        'email' => $first->merchant->email,
+                        'phone_number' => $first->merchant->phone_number,
+                        'gender' => $first->merchant->onboardingApplication?->gender,
+                        'profile_image' => $first->merchant->profile_image
+                            ? "/merchant-management/accounts/{$first->merchant->getKey()}/media/profile"
+                            : null,
+                    ] : null,
+                ];
+            })->values()->all();
+    }
+
+    public function editRequestMedia(Request $request, string $role, MerchantProfileEditRequest $editRequest, string $side): mixed
+    {
+        $this->authorizeReviewer($request);
+        abort_unless(in_array($side, ['from', 'to'], true), 404);
+        $path = $editRequest->{$side.'_value'};
+        abort_unless($path && Storage::disk('local')->exists($path), 404);
+        return Storage::disk('local')->response($path);
+    }
+
+    public function reviewEditRequest(Request $request, string $role, MerchantProfileEditRequest $editRequest): RedirectResponse
+    {
+        $this->authorizeReviewer($request);
+        $data = $request->validate(['status' => ['required', Rule::in(['approved', 'rejected'])]]);
+        $requestItems = $editRequest->request_key
+            ? MerchantProfileEditRequest::where('request_key', $editRequest->request_key)->where('status', 'pending')->get()
+            : MerchantProfileEditRequest::where('merchant_id', $editRequest->merchant_id)
+                ->where('requested_at', $editRequest->requested_at)
+                ->where('status', 'pending')->get();
+        if ($editRequest->status !== 'pending') return back();
+        if ($data['status'] === 'approved') {
+            $merchant = $editRequest->merchant()->with('onboardingApplication')->firstOrFail();
+            $merchantFields = ['first_name', 'middle_name', 'last_name', 'email', 'phone_number'];
+            foreach ($requestItems as $item) {
+                if (in_array($item->field, $merchantFields, true)) {
+                    $merchant->forceFill([$item->field => $item->to_value]);
+                    if (in_array($item->field, ['first_name', 'middle_name', 'last_name'], true)) {
+                        $merchant->name = collect([$merchant->first_name, $merchant->middle_name, $merchant->last_name])->filter()->implode(' ');
+                    }
+                    $merchant->save();
+                } elseif (in_array($item->field, ['profile_image'], true)) {
+                    $merchant->forceFill(['profile_image' => $item->to_value])->save();
+                } else {
+                    $merchant->onboardingApplication?->forceFill([$item->field => $item->to_value])->save();
+                }
+            }
+        }
+        $reviewerRole = $request->user()?->getTable() === 'superadmin' ? 'superadmin' : 'admin';
+        foreach ($requestItems as $item) {
+            $item->forceFill([
+                'status' => $data['status'],
+                'approved_at' => $data['status'] === 'approved' ? now() : null,
+                'approved_by' => $data['status'] === 'approved' ? $request->user()->getKey() : null,
+                'approved_by_role' => $data['status'] === 'approved' ? $reviewerRole : null,
+            ])->save();
+        }
+        Inertia::flash('toast', ['type' => $data['status'] === 'approved' ? 'success' : 'warning', 'message' => 'Merchant profile edit request '.$data['status'].'.']);
+        return back();
+    }
+
+    private function editValue(MerchantProfileEditRequest $edit, string $side): ?string
+    {
+        $value = $edit->{$side.'_value'};
+        return in_array($edit->field, ['profile_image', 'id_front_image', 'id_back_image', 'selfie_image'], true) && $value
+            ? "/merchant-management/profile-edit-requests/{$edit->getKey()}/media/{$side}"
+            : $value;
+    }
+
+    private function reviewerName(int $id, ?string $role): ?string
+    {
+        $model = match ($role) { 'superadmin' => Superadmin::class, default => Admin::class };
+        $reviewer = $model::find($id);
+        return $reviewer?->name ?: $reviewer?->email;
     }
 
     private function applicationMediaUrl(Merchant $merchant, string $field): ?string
@@ -215,7 +323,7 @@ class MerchantOnboardingController extends Controller
             'gender' => ['nullable', Rule::in(['male', 'female', 'non-binary', 'other', 'prefer-not-to-say'])],
             'nationality' => ['nullable', 'string', 'max:100'],
             'house_unit_building' => ['nullable', 'string', 'max:150'], 'street' => ['nullable', 'string', 'max:150'], 'barangay' => ['nullable', 'string', 'max:100'],
-            'city_municipality' => ['nullable', 'string', 'max:100'], 'province' => ['nullable', 'string', 'max:100'], 'region' => ['nullable', 'string', 'max:100'], 'postal_code' => ['nullable', 'string', 'max:20'],
+            'city_municipality' => ['nullable', 'string', 'max:100'], 'province' => ['nullable', 'string', 'max:100'], 'region' => ['nullable', 'string', 'max:100'], 'zip_code' => ['nullable', 'string', 'max:20'],
             'latitude' => ['nullable', 'numeric', 'between:-90,90'], 'longitude' => ['nullable', 'numeric', 'between:-180,180'],
             'id_type' => ['nullable', Rule::in(['National ID (PhilSys)', "Driver's License", 'Passport', 'UMID', 'Postal ID', 'SSS ID', 'PhilHealth ID', 'PRC ID', 'TIN ID', "Voter's ID", 'NBI Clearance', 'Other Government-Issued ID'])],
             'id_front_image' => ['nullable', 'image', 'max:1024'], 'id_back_image' => ['nullable', 'image', 'max:1024'], 'selfie_image' => ['nullable', 'image', 'max:1024'],
@@ -240,7 +348,7 @@ class MerchantOnboardingController extends Controller
         }
         $application = $merchant->onboardingApplication;
         if ($application) {
-            $applicationData = collect(['date_of_birth', 'gender', 'nationality', 'house_unit_building', 'street', 'barangay', 'city_municipality', 'province', 'region', 'postal_code', 'latitude', 'longitude', 'id_type'])
+            $applicationData = collect(['date_of_birth', 'gender', 'nationality', 'house_unit_building', 'street', 'barangay', 'city_municipality', 'province', 'region', 'zip_code', 'latitude', 'longitude', 'id_type'])
                 ->filter(fn (string $field): bool => array_key_exists($field, $data))
                 ->mapWithKeys(fn (string $field): array => [$field => $data[$field]])
                 ->all();
@@ -327,7 +435,7 @@ class MerchantOnboardingController extends Controller
         $reviewerRole = $request->user()?->getTable() === 'superadmin' ? 'superadmin' : 'admin';
         $application->forceFill(['status' => $data['status'], 'rejection_reason' => $approved ? null : $data['rejection_reason'], 'reviewed_at' => now(), 'reviewed_by' => $request->user()->getKey(), 'reviewed_by_role' => $reviewerRole])->save();
         $merchantAttributes = [
-            'status' => $approved ? 'active' : 'pending',
+            'status' => $approved ? 'active' : 'rejected',
             'onboarding_admin_verified' => $approved,
             'onboarding_admin_verified_at' => $approved ? now() : null,
             'onboarding_completed' => $approved,

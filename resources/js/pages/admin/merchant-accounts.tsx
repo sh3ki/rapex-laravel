@@ -27,6 +27,7 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import { notify } from '@/lib/toast';
+import { formatAdminDate, formatAdminDateTime } from '@/lib/date-format';
 
 type Account = {
     id: number;
@@ -49,7 +50,7 @@ type Account = {
     city_municipality?: string | null;
     province?: string | null;
     region?: string | null;
-    postal_code?: string | null;
+    zip_code?: string | null;
     latitude?: number | null;
     longitude?: number | null;
     id_type?: string | null;
@@ -62,7 +63,7 @@ type Account = {
 type EditForm = {
     first_name: string; middle_name: string; last_name: string; email: string; phone_number: string;
     date_of_birth: string; gender: string; nationality: string; house_unit_building: string; street: string;
-    barangay: string; city_municipality: string; province: string; region: string; postal_code: string;
+    barangay: string; city_municipality: string; province: string; region: string; zip_code: string;
     latitude: string; longitude: string; id_type: string; status: string;
 };
 type MediaField = 'profile_image' | 'id_front_image' | 'id_back_image' | 'selfie_image';
@@ -70,6 +71,7 @@ type ImagePreview = { src: string; label: string } | null;
 
 const genderOptions = [['male', 'Male'], ['female', 'Female'], ['non-binary', 'Non-binary'], ['other', 'Other'], ['prefer-not-to-say', 'Prefer not to say']];
 const idTypeOptions = ['National ID (PhilSys)', "Driver's License", 'Passport', 'UMID', 'Postal ID', 'SSS ID', 'PhilHealth ID', 'PRC ID', 'TIN ID', "Voter's ID", 'NBI Clearance', 'Other Government-Issued ID'];
+const profileImage = (account: Account) => account.onboarding_profile_image ?? account.profile_image;
 
 function AccountDetails({ account, editing, form, setForm, previews, fileInputKeys, onFileChange, onImageClick }: {
     account: Account; editing: boolean; form: EditForm; setForm: Dispatch<SetStateAction<EditForm>>;
@@ -95,9 +97,9 @@ function AccountDetails({ account, editing, form, setForm, previews, fileInputKe
 
     return <div className="max-h-[72vh] space-y-5 overflow-y-auto pr-2">
         <section className="space-y-5 rounded-lg border p-5"><h3 className="border-b pb-3 text-base font-semibold">Profile information</h3><div className="grid gap-6 lg:grid-cols-[180px_1fr]"><div>{editing ? profileUploader : image('profile_image', 'Profile picture', profileImage)}</div><div className="grid gap-5"><div className="grid gap-5 sm:grid-cols-3">{textField('first_name', 'First name')}{textField('middle_name', 'Middle name')}{textField('last_name', 'Last name')}</div><div className="grid gap-5 sm:grid-cols-3">{textField('email', 'Email address', 'email')}{textField('phone_number', 'Mobile number')}<div className="grid gap-2"><Label>Status</Label>{status}</div></div><div className="grid gap-5 sm:grid-cols-3">{textField('date_of_birth', 'Birthdate', 'date')}<div className="grid gap-2"><Label>Gender</Label>{gender}</div>{textField('nationality', 'Nationality')}</div></div></div></section>
-        <section className="space-y-5 rounded-lg border p-5"><h3 className="border-b pb-3 text-base font-semibold">Address and location</h3><div className="grid gap-5 sm:grid-cols-3">{textField('house_unit_building', 'House / Unit / Building no.')}{textField('street', 'Street')}{textField('barangay', 'Barangay')}{textField('city_municipality', 'City / Municipality')}{textField('province', 'Province')}{textField('region', 'Region')}{textField('postal_code', 'Postal code')}{textField('latitude', 'Latitude', 'number')}{textField('longitude', 'Longitude', 'number')}</div></section>
+        <section className="space-y-5 rounded-lg border p-5"><h3 className="border-b pb-3 text-base font-semibold">Address and location</h3><div className="grid gap-5 sm:grid-cols-3">{textField('house_unit_building', 'House / Unit / Building no.')}{textField('street', 'Street')}{textField('barangay', 'Barangay')}{textField('city_municipality', 'City / Municipality')}{textField('province', 'Province')}{textField('region', 'Region')}{textField('zip_code', 'ZIP code')}{textField('latitude', 'Latitude', 'number')}{textField('longitude', 'Longitude', 'number')}</div></section>
         <section className="space-y-5 rounded-lg border p-5"><h3 className="border-b pb-3 text-base font-semibold">ID and selfie verification</h3><div className="grid gap-2"><Label>ID type</Label>{idType}</div><div className="grid gap-5 sm:grid-cols-3">{image('id_front_image', 'Valid ID front', account.id_front_image)}{image('id_back_image', 'Valid ID back', account.id_back_image)}{image('selfie_image', 'Selfie capture', account.selfie_image)}</div></section>
-        <div className="rounded-lg border p-5"><p className="text-muted-foreground text-sm">Registered date</p><p className="text-sm font-medium">{account.registered_at ? new Date(account.registered_at).toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}</p></div>
+        <div className="rounded-lg border p-5"><p className="text-muted-foreground text-sm">Registered date</p>{account.registered_at ? <div className="text-sm font-medium"><div>{formatAdminDateTime(account.registered_at).date}</div><div className="text-muted-foreground text-xs">{formatAdminDateTime(account.registered_at).time}</div></div> : <p className="text-sm font-medium">—</p>}</div>
     </div>;
 }
 
@@ -118,13 +120,13 @@ function LegacyAccountDetails({ account, editing, form, setForm, previews, onFil
     };
     return <div className="max-h-[72vh] space-y-8 overflow-y-auto pr-2">
         <section className="space-y-4"><h3 className="font-medium">Profile information</h3><div className="grid gap-4 sm:grid-cols-2">{image('profile_image', 'Profile picture', account.onboarding_profile_image ?? account.profile_image)}{textField('first_name', 'First name')}{textField('middle_name', 'Middle name')}{textField('last_name', 'Last name')}{textField('date_of_birth', 'Birthdate', 'date')}{editing ? <div className="grid gap-2"><Label>Gender</Label><Select value={form.gender} onValueChange={(gender) => setForm((current) => ({ ...current, gender }))}><SelectTrigger><SelectValue placeholder="Select gender" /></SelectTrigger><SelectContent>{genderOptions.map(([key, label]) => <SelectItem key={key} value={key}>{label}</SelectItem>)}</SelectContent></Select></div> : <div><p className="text-muted-foreground">Gender</p><p>{value('gender')}</p></div>}{textField('nationality', 'Nationality')}{textField('email', 'Email address', 'email')}{textField('phone_number', 'Mobile number')}</div></section>
-        <section className="space-y-4"><h3 className="font-medium">Address and location</h3><div className="grid gap-4 sm:grid-cols-3">{textField('house_unit_building', 'House / Unit / Building no.')}{textField('street', 'Street')}{textField('barangay', 'Barangay')}{textField('city_municipality', 'City / Municipality')}{textField('province', 'Province')}{textField('region', 'Region')}{textField('postal_code', 'Postal code')}{textField('latitude', 'Latitude', 'number')}{textField('longitude', 'Longitude', 'number')}</div></section>
+        <section className="space-y-4"><h3 className="font-medium">Address and location</h3><div className="grid gap-4 sm:grid-cols-3">{textField('house_unit_building', 'House / Unit / Building no.')}{textField('street', 'Street')}{textField('barangay', 'Barangay')}{textField('city_municipality', 'City / Municipality')}{textField('province', 'Province')}{textField('region', 'Region')}{textField('zip_code', 'ZIP code')}{textField('latitude', 'Latitude', 'number')}{textField('longitude', 'Longitude', 'number')}</div></section>
         <section className="space-y-4"><h3 className="font-medium">ID and selfie verification</h3>{editing ? <div className="grid gap-2"><Label>ID type</Label><Select value={form.id_type} onValueChange={(id_type) => setForm((current) => ({ ...current, id_type }))}><SelectTrigger><SelectValue placeholder="Select ID type" /></SelectTrigger><SelectContent>{idTypeOptions.map((option) => <SelectItem key={option} value={option}>{option}</SelectItem>)}</SelectContent></Select></div> : <div><p className="text-muted-foreground">ID type</p><p>{value('id_type')}</p></div>}<div className="grid gap-4 sm:grid-cols-3">{image('id_front_image', 'Valid ID front', account.id_front_image)}{image('id_back_image', 'Valid ID back', account.id_back_image)}{image('selfie_image', 'Selfie capture', account.selfie_image)}</div></section>
-        <section className="grid gap-4 sm:grid-cols-2"><div><p className="text-muted-foreground">Status</p>{editing ? <Select value={form.status} onValueChange={(status) => setForm((current) => ({ ...current, status }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{statuses.slice(1).map((status) => <SelectItem key={status} value={status}>{statusLabel(status)}</SelectItem>)}</SelectContent></Select> : <StatusBadge status={account.status} />}</div><div><p className="text-muted-foreground">Registered date</p><p>{account.registered_at ? new Date(account.registered_at).toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}</p></div></section>
+        <section className="grid gap-4 sm:grid-cols-2"><div><p className="text-muted-foreground">Status</p>{editing ? <Select value={form.status} onValueChange={(status) => setForm((current) => ({ ...current, status }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{statuses.slice(1).map((status) => <SelectItem key={status} value={status}>{statusLabel(status)}</SelectItem>)}</SelectContent></Select> : <StatusBadge status={account.status} />}</div><div><p className="text-muted-foreground">Registered date</p>{account.registered_at ? <div><div>{formatAdminDateTime(account.registered_at).date}</div><div className="text-muted-foreground text-xs">{formatAdminDateTime(account.registered_at).time}</div></div> : <p>—</p>}</div></section>
     </div>;
 }
 
-const statuses = ['all', 'pending', 'active', 'inactive', 'suspended', 'banned', 'deactivated', 'deleted'];
+const statuses = ['all', 'pending', 'active', 'inactive', 'suspended', 'banned', 'deactivated', 'rejected', 'deleted'];
 const statusLabel = (status: string) => status.charAt(0).toUpperCase() + status.slice(1);
 
 function StatusBadge({ status }: { status: string }) {
@@ -135,6 +137,7 @@ function StatusBadge({ status }: { status: string }) {
         suspended: 'bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300',
         banned: 'bg-red-100 text-red-700 dark:bg-red-950/50 dark:text-red-300',
         deactivated: 'bg-blue-100 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300',
+        rejected: 'bg-red-100 text-red-700 dark:bg-red-950/50 dark:text-red-300',
         deleted: 'bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300',
     };
     return <span className={`inline-flex rounded-full px-2 py-1 text-xs font-medium ${colors[status] ?? colors.inactive}`}>{statusLabel(status)}</span>;
@@ -151,7 +154,7 @@ export default function MerchantAccounts({ accounts }: { accounts: Account[] }) 
     const [viewingAccount, setViewingAccount] = useState<Account | null>(null);
     const [deletingAccount, setDeletingAccount] = useState<Account | null>(null);
     const [passwordAccount, setPasswordAccount] = useState<Account | null>(null);
-    const [editForm, setEditForm] = useState<EditForm>({ first_name: '', middle_name: '', last_name: '', email: '', phone_number: '', date_of_birth: '', gender: '', nationality: '', house_unit_building: '', street: '', barangay: '', city_municipality: '', province: '', region: '', postal_code: '', latitude: '', longitude: '', id_type: '', status: 'pending' });
+    const [editForm, setEditForm] = useState<EditForm>({ first_name: '', middle_name: '', last_name: '', email: '', phone_number: '', date_of_birth: '', gender: '', nationality: '', house_unit_building: '', street: '', barangay: '', city_municipality: '', province: '', region: '', zip_code: '', latitude: '', longitude: '', id_type: '', status: 'pending' });
     const [password, setPassword] = useState('');
     const [passwordConfirmation, setPasswordConfirmation] = useState('');
     const [editFiles, setEditFiles] = useState<Record<MediaField, File | null>>({ profile_image: null, id_front_image: null, id_back_image: null, selfie_image: null });
@@ -191,7 +194,7 @@ export default function MerchantAccounts({ accounts }: { accounts: Account[] }) 
             email: account.email,
             phone_number: account.phone_number ?? '',
             date_of_birth: account.date_of_birth ?? '', gender: account.gender ?? '', nationality: account.nationality ?? '',
-            house_unit_building: account.house_unit_building ?? '', street: account.street ?? '', barangay: account.barangay ?? '', city_municipality: account.city_municipality ?? '', province: account.province ?? '', region: account.region ?? '', postal_code: account.postal_code ?? '',
+            house_unit_building: account.house_unit_building ?? '', street: account.street ?? '', barangay: account.barangay ?? '', city_municipality: account.city_municipality ?? '', province: account.province ?? '', region: account.region ?? '', zip_code: account.zip_code ?? '',
             latitude: account.latitude === null || account.latitude === undefined ? '' : String(account.latitude), longitude: account.longitude === null || account.longitude === undefined ? '' : String(account.longitude), id_type: account.id_type ?? '',
             status: account.status,
         });
@@ -218,20 +221,20 @@ export default function MerchantAccounts({ accounts }: { accounts: Account[] }) 
         }
     };
     const legacyColumns: DataTableColumn<Account>[] = [
-        { key: 'name', label: 'Name', sortable: true, value: (account) => account.name, render: (account) => <div className="flex items-center gap-3"><Avatar><AvatarImage src={account.profile_image ?? undefined} alt="" /><AvatarFallback>{account.name.slice(0, 2).toUpperCase()}</AvatarFallback></Avatar><span className="font-medium">{account.name}</span></div> },
+        { key: 'name', label: 'Name', sortable: true, value: (account) => account.name, render: (account) => <div className="flex items-center gap-3"><Avatar><AvatarImage src={profileImage(account) ?? undefined} alt="" /><AvatarFallback>{account.name.slice(0, 2).toUpperCase()}</AvatarFallback></Avatar><span className="font-medium">{account.name}</span></div> },
         { key: 'email', label: 'Email', sortable: true, value: (account) => account.email, render: (account) => <span className="text-muted-foreground">{account.email}</span> },
         { key: 'phone_number', label: 'Phone Number', value: (account) => account.phone_number ?? '—' },
-        { key: 'registered_at', label: 'Registered Date', sortable: true, value: (account) => account.registered_at ?? '', render: (account) => account.registered_at ? new Date(account.registered_at).toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' }) : '—' },
+        { key: 'registered_at', label: 'Registered Date', sortable: true, value: (account) => account.registered_at ?? '', render: (account) => account.registered_at ? <div><div>{formatAdminDateTime(account.registered_at).date}</div><div className="text-muted-foreground text-xs">{formatAdminDateTime(account.registered_at).time}</div></div> : '—' },
         { key: 'status', label: 'Status', sortable: true, value: (account) => account.status, render: (account) => <StatusBadge status={account.status} /> },
     ];
     const columns: DataTableColumn<Account>[] = [
-        { key: 'name', label: 'Name', sortable: true, value: (account) => account.name, render: (account) => <div className="flex items-center gap-3"><Avatar><AvatarImage src={account.profile_image ?? undefined} alt="" /><AvatarFallback>{account.name.slice(0, 2).toUpperCase()}</AvatarFallback></Avatar><span className="font-medium">{account.name}</span></div> },
+        { key: 'name', label: 'Name', sortable: true, value: (account) => account.name, render: (account) => <div className="flex items-center gap-3"><Avatar><AvatarImage src={profileImage(account) ?? undefined} alt="" /><AvatarFallback>{account.name.slice(0, 2).toUpperCase()}</AvatarFallback></Avatar><span className="font-medium">{account.name}</span></div> },
         { key: 'email', label: 'Email', sortable: true, value: (account) => account.email, render: (account) => <span className="text-muted-foreground">{account.email}</span> },
         { key: 'phone_number', label: 'Phone Number', sortable: true, value: (account) => account.phone_number ?? '-' },
-        { key: 'date_of_birth', label: 'Birthdate', sortable: true, value: (account) => account.date_of_birth ?? '-', render: (account) => account.date_of_birth ?? '-' },
+        { key: 'date_of_birth', label: 'Birthdate', sortable: true, value: (account) => account.date_of_birth ?? '-', render: (account) => formatAdminDate(account.date_of_birth) },
         { key: 'gender', label: 'Gender', sortable: true, value: (account) => account.gender ?? '-', render: (account) => account.gender ? statusLabel(account.gender) : '-' },
         { key: 'nationality', label: 'Nationality', sortable: true, value: (account) => account.nationality ?? '-' },
-        { key: 'registered_at', label: 'Registered At', sortable: true, value: (account) => account.registered_at ?? '', render: (account) => account.registered_at ? <div><div>{new Date(account.registered_at).toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' })}</div><div className="text-muted-foreground text-xs">{new Date(account.registered_at).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true })}</div></div> : '-' },
+        { key: 'registered_at', label: 'Registered At', sortable: true, value: (account) => account.registered_at ?? '', render: (account) => account.registered_at ? <div><div>{formatAdminDateTime(account.registered_at).date}</div><div className="text-muted-foreground text-xs">{formatAdminDateTime(account.registered_at).time}</div></div> : '—' },
         { key: 'status', label: 'Status', sortable: true, value: (account) => account.status, render: (account) => <StatusBadge status={account.status} /> },
     ];
 
@@ -277,7 +280,7 @@ export default function MerchantAccounts({ accounts }: { accounts: Account[] }) 
                         </div>
                         <div className="grid gap-4 text-sm sm:grid-cols-2">
                             <div><p className="text-muted-foreground">Phone number</p><p>{viewingAccount.phone_number || '—'}</p></div>
-                            <div><p className="text-muted-foreground">Registered date</p><p>{viewingAccount.registered_at ? new Date(viewingAccount.registered_at).toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}</p></div>
+                            <div><p className="text-muted-foreground">Registered date</p>{viewingAccount.registered_at ? <div><div>{formatAdminDateTime(viewingAccount.registered_at).date}</div><div className="text-muted-foreground text-xs">{formatAdminDateTime(viewingAccount.registered_at).time}</div></div> : <p>—</p>}</div>
                             <div><p className="text-muted-foreground">Status</p><StatusBadge status={viewingAccount.status} /></div>
                         </div>
                     </div>*/}

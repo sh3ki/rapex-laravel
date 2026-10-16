@@ -19,11 +19,19 @@ class StoreClassificationSeeder extends Seeder
             'AGRICULTURE, FARM & ANIMAL SUPPLY' => ['Agri-Supply Store', 'Seeds & Fertilizer Store', 'Organic Farming Supply Store', 'Animal Feeds & Supply Store', 'Veterinary Supply Store', 'Farm Equipment & Machinery Store', 'Irrigation & Agricultural Equipment Store', 'Plant Nursery', 'Garden & Landscaping Supply Store', 'Plant and Seeds Shop', 'Aquaculture & Fishery Supply Store', 'Farm Produce Store', 'Grain & Agricultural Products Store', 'Livestock & Poultry Trader', 'Seafood Wholesaler'],
         ];
 
+        $descriptions = [
+            'FOOD & BEVERAGES' => 'Ready ka na ba ibenta ang iyong specialty na panglasang Pinoy? Piliin ang pinakamalapit na uri ng food business mo.',
+            'DAILY ESSENTIALS & GENERAL MERCHANDISE' => 'Para sa araw-araw na pangangailangan—grocery, wet market, sari-sari, health essentials, at iba pang mabilis hanapin ng customer.',
+            'GENERAL RETAIL, LIFESTYLE & SPECIALTY' => 'Marketplace para sa gadgets, gaming, fashion, hobbies, pre-loved goods, at iba pang special listings.',
+            'BUSINESS, INDUSTRIAL & COMMERCIAL SUPPLIES' => 'Para sa hardware, construction, industrial supply, office supply, at iba pang pang-negosyong produkto at kagamitan.',
+            'AGRICULTURE, FARM & ANIMAL SUPPLY' => 'Para sa poultry, pet shop, farms, piggery, machines, pest control, fertilizer, rice, seeds, at lahat ng pang-agriculture.',
+        ];
+
         $categoryOrder = 1;
         foreach ($classifications as $categoryName => $types) {
             $category = StoreCategory::withTrashed()->updateOrCreate(
                 ['name' => $categoryName],
-                ['slug' => Str::slug($categoryName), 'sort_order' => $categoryOrder, 'status' => 'active'],
+                ['description' => $descriptions[$categoryName], 'slug' => Str::slug($categoryName), 'sort_order' => $categoryOrder, 'status' => 'active'],
             );
             $categoryOrder++;
             if ($category->trashed()) {

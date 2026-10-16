@@ -62,6 +62,11 @@ const merchantManagementItems: NavItem[] = [
         icon: Store,
         items: [
             {
+                title: 'Store Applications',
+                href: '/store-management/applications',
+                icon: ClipboardList,
+            },
+            {
                 title: 'Store Classification',
                 href: '/store-management/classification',
                 icon: Store,
@@ -75,6 +80,21 @@ const merchantOnboardingItems: NavItem[] = [
         title: 'Onboarding',
         href: '/onboarding',
         icon: BriefcaseBusiness,
+    },
+];
+
+const merchantStoreManagementItems: NavItem[] = [
+    {
+        title: 'Store Management',
+        href: '/store-management/stores',
+        icon: Store,
+        items: [
+            {
+                title: 'Stores',
+                href: '/store-management/stores',
+                icon: Store,
+            },
+        ],
     },
 ];
 
@@ -119,6 +139,12 @@ export function AppSidebar() {
                         {(role === 'admin' || role === 'superadmin') && (
                             <NavMain
                                 items={merchantManagementItems}
+                                groupLabel="Operations"
+                            />
+                        )}
+                        {role === 'merchant' && (
+                            <NavMain
+                                items={merchantStoreManagementItems}
                                 groupLabel="Operations"
                             />
                         )}

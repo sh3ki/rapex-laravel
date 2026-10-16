@@ -4,7 +4,9 @@ import {
     ChevronRight,
     ClipboardCheck,
     Clock3,
+    AlertCircle,
     MapPin,
+    LocateFixed,
     ShieldCheck,
     UserRound,
     CheckCircle2,
@@ -13,6 +15,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { CameraCapture } from '@/components/camera-capture';
 import { LocationMap } from '@/components/location-map';
 import { ProfileImageUpload } from '@/components/profile-image-upload';
+import { AddressZipCodeField, SearchableAddressFields } from '@/components/searchable-address-fields';
 import { Button } from '@/components/ui/button';
 import {
     Card,
@@ -49,7 +52,9 @@ type Merchant = {
     email: string;
     phone_number: string;
 };
-type Application = Record<string, any> | null;
+type Application = (Record<string, any> & {
+    media?: Record<string, string | null>;
+}) | null;
 type Props = {
     merchant: Merchant;
     application: Application;
@@ -140,7 +145,7 @@ export default function MerchantOnboarding({
             city_municipality: application?.city_municipality ?? '',
             province: application?.province ?? '',
             region: application?.region ?? '',
-            postal_code: application?.postal_code ?? '',
+            zip_code: application?.zip_code ?? '',
             latitude: application?.latitude
                 ? Number(application.latitude)
                 : null,
@@ -167,6 +172,7 @@ export default function MerchantOnboarding({
     const [locating, setLocating] = useState(false);
     const [errors, setErrors] = useState<Record<string, string>>({});
     const [submitted, setSubmitted] = useState(false);
+    const [editingRejected, setEditingRejected] = useState(false);
     const [confirmOpen, setConfirmOpen] = useState(false);
     const [agreedToPolicies, setAgreedToPolicies] = useState(false);
     const [termsOpen, setTermsOpen] = useState(false);
@@ -195,18 +201,35 @@ export default function MerchantOnboarding({
                 'id_back_image',
                 'selfie_image',
             ].map(async (key) => {
-                const file = await loadImage(key);
-                setFiles((current) => ({ ...current, [key]: file }));
+                const storedFile = await loadImage(key);
+                if (storedFile) {
+                    setFiles((current) => ({ ...current, [key]: storedFile }));
+                    return;
+                }
+
+                const url = application?.media?.[key];
+                if (!url) return;
+                try {
+                    const response = await fetch(url, { credentials: 'same-origin' });
+                    if (!response.ok) return;
+                    const blob = await response.blob();
+                    const file = new File([blob], `${key}.jpg`, {
+                        type: blob.type || 'image/jpeg',
+                    });
+                    setFiles((current) => ({ ...current, [key]: file }));
+                    await saveImage(key, file);
+                } catch {
+                    // The remote URL is still used as a visual fallback below.
+                }
             }),
         );
-    }, []);
-    useEffect(() => {
-        if (
-            application?.status === 'pending' ||
-            application?.status === 'approved'
-        )
-            return;
-        const request = () => {
+    }, [application]);
+    const requestLocation = () => {
+            if (!navigator.geolocation) {
+                setLocationError('Location access is not available in this browser.');
+                setLocating(false);
+                return;
+            }
             setLocating(true);
             navigator.geolocation.getCurrentPosition(
                 (position) => {
@@ -226,9 +249,49 @@ export default function MerchantOnboarding({
                 },
                 { enableHighAccuracy: true, timeout: 10000 },
             );
-        };
-        request();
+    };
+    useEffect(() => {
+        if (application?.status === 'pending' || application?.status === 'approved') return;
+        requestLocation();
     }, []);
+
+    if (application?.status === 'rejected' && !editingRejected) {
+        return (
+            <>
+                <Head title="Application needs changes" />
+                <main className="mx-auto w-full max-w-5xl space-y-6 p-4 sm:p-6">
+                    <div>
+                        <p className="text-primary text-sm font-medium">Merchant application</p>
+                        <h1 className="text-3xl font-semibold">Your application needs changes</h1>
+                        <p className="text-muted-foreground mt-2">
+                            Please review the administrator&apos;s feedback, update your application, and submit it again.
+                        </p>
+                    </div>
+                    <Card className="border-destructive/40">
+                        <CardContent className="space-y-5 p-6 sm:p-8">
+                            <div className="flex items-start gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-4">
+                                <AlertCircle className="text-destructive mt-0.5 size-5 shrink-0" />
+                                <div>
+                                    <p className="font-semibold">Administrator feedback</p>
+                                    <p className="text-muted-foreground mt-1 whitespace-pre-wrap text-sm">
+                                        {application.rejection_reason || 'No specific reason was provided. Please review your information and identity documents before resubmitting.'}
+                                    </p>
+                                </div>
+                            </div>
+                            {application.reviewed_at && (
+                                <p className="text-muted-foreground text-sm">
+                                    Reviewed {new Date(application.reviewed_at).toLocaleDateString()}
+                                </p>
+                            )}
+                            <Button type="button" onClick={() => setEditingRejected(true)}>
+                                Update application
+                            </Button>
+                        </CardContent>
+                    </Card>
+                </main>
+            </>
+        );
+    }
 
     if (application?.status === 'pending') {
         return (
@@ -330,7 +393,7 @@ export default function MerchantOnboarding({
                 'city_municipality',
                 'province',
                 'region',
-                'postal_code',
+                'zip_code',
                 'latitude',
                 'longitude',
             ])
@@ -393,14 +456,14 @@ export default function MerchantOnboarding({
         <div className="space-y-2">
             <Label htmlFor={key}>
                 {label}
-                {required && <span className="text-destructive"> *</span>}
+                {required ? <span className="text-destructive"> *</span> : <span className="ml-1 text-xs font-normal text-muted-foreground">(optional)</span>}
             </Label>
             <Input
                 id={key}
                 type={type}
                 value={String(draft[key] ?? '')}
                 disabled={disabled}
-                onChange={(event) => update(key, event.target.value)}
+                onChange={(event) => update(key, type === 'number' ? (event.target.value === '' ? null : Number(event.target.value)) : event.target.value)}
             />
             {errors[key] && (
                 <p className="text-destructive text-sm">{errors[key]}</p>
@@ -424,6 +487,17 @@ export default function MerchantOnboarding({
                         application is normally reviewed within 24 hours.
                     </p>
                 </div>
+                {application?.status === 'rejected' && (
+                    <div className="flex items-start gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-4">
+                        <AlertCircle className="text-destructive mt-0.5 size-5 shrink-0" />
+                        <div>
+                            <p className="font-semibold">Administrator feedback</p>
+                            <p className="text-muted-foreground mt-1 whitespace-pre-wrap text-sm">
+                                {application.rejection_reason || 'No specific reason was provided. Please review your information and identity documents before resubmitting.'}
+                            </p>
+                        </div>
+                    </div>
+                )}
                 <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                     {onboardingSteps.map(({ label, icon: Icon }, index) => (
                             <div
@@ -447,6 +521,7 @@ export default function MerchantOnboarding({
                         <CardContent className="space-y-6">
                             <ProfileImageUpload
                                 value={files.profile_image}
+                                initialPreview={application?.media?.profile_image ?? ''}
                                 onChange={(file) =>
                                     setFile('profile_image', file)
                                 }
@@ -541,45 +616,43 @@ export default function MerchantOnboarding({
                             </CardDescription>
                         </CardHeader>
                         <CardContent className="grid gap-5 md:grid-cols-3">
+                            <SearchableAddressFields
+                                draft={draft}
+                                update={update}
+                                error={(key) => errors[key] && <p className="text-destructive text-sm">{errors[key]}</p>}
+                            />
+                            {field('street', 'Street', 'text', false, true)}
                             {field(
                                 'house_unit_building',
-                                'House / Unit / Building no.',
+                                'House/Unit/Bldg/Floor',
                                 'text',
                                 false,
                                 true,
                             )}
-                            {field('street', 'Street', 'text', false, true)}
-                            {field('barangay', 'Barangay', 'text', false, true)}
-                            {field(
-                                'city_municipality',
-                                'City / Municipality',
-                                'text',
-                                false,
-                                true,
-                            )}
-                            {field('province', 'Province', 'text', false, true)}
-                            {field('region', 'Region', 'text', false, true)}
-                            {field(
-                                'postal_code',
-                                'Postal code',
-                                'text',
-                                false,
-                                true,
-                            )}
+                            <AddressZipCodeField
+                                draft={draft}
+                                error={(key) => errors[key] && <p className="text-destructive text-sm">{errors[key]}</p>}
+                            />
                             {field(
                                 'latitude',
                                 'Latitude',
                                 'number',
-                                true,
+                                false,
                                 true,
                             )}
                             {field(
                                 'longitude',
                                 'Longitude',
                                 'number',
-                                true,
+                                false,
                                 true,
                             )}
+                            <div className="flex items-end md:col-span-3">
+                                <Button type="button" variant="outline" onClick={requestLocation} disabled={locating}>
+                                    <LocateFixed className="size-4" />
+                                    {locating ? 'Detecting...' : 'Use my current location'}
+                                </Button>
+                            </div>
                             <div className="md:col-span-3">
                                 <LocationMap
                                     latitude={
@@ -591,6 +664,13 @@ export default function MerchantOnboarding({
                                         typeof draft.longitude === 'number'
                                             ? draft.longitude
                                             : null
+                                    }
+                                    onLocationChange={({ latitude, longitude }) =>
+                                        setDraft((current) => ({
+                                            ...current,
+                                            latitude: Number(latitude.toFixed(7)),
+                                            longitude: Number(longitude.toFixed(7)),
+                                        }))
                                     }
                                     googleMapsApiKey={googleMapsApiKey}
                                 />
@@ -608,7 +688,7 @@ export default function MerchantOnboarding({
                             </CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-6">
-                            <div className="space-y-2">
+                            <div className="w-full space-y-2 md:w-1/2">
                                 <Label>
                                     ID type
                                     <span className="text-destructive"> *</span>
@@ -639,6 +719,7 @@ export default function MerchantOnboarding({
                                     label="ID front"
                                     instruction="Place the front of your valid government-issued ID inside the frame. Make sure all text is readable and avoid glare."
                                     value={files.id_front_image}
+                                    initialPreview={application?.media?.id_front_image ?? ''}
                                     onChange={(file) =>
                                         setFile('id_front_image', file)
                                     }
@@ -647,6 +728,7 @@ export default function MerchantOnboarding({
                                     label="ID back"
                                     instruction="Turn the same ID over and capture the entire back. Keep all text and security marks visible."
                                     value={files.id_back_image}
+                                    initialPreview={application?.media?.id_back_image ?? ''}
                                     onChange={(file) =>
                                         setFile('id_back_image', file)
                                     }
@@ -657,6 +739,7 @@ export default function MerchantOnboarding({
                                 facingMode="user"
                                 instruction="Face the camera directly, remove sunglasses or face coverings, use even lighting, and keep your full face inside the frame."
                                 value={files.selfie_image}
+                                initialPreview={application?.media?.selfie_image ?? ''}
                                 onChange={(file) =>
                                     setFile('selfie_image', file)
                                 }
@@ -708,7 +791,7 @@ export default function MerchantOnboarding({
                                     ))}
                                 </div>
                                 {files.profile_image && (
-                                    <div className="space-y-2">
+                                    <div className="space-y-2 rounded-lg border p-4">
                                         <p className="text-muted-foreground font-medium">
                                             Profile picture
                                         </p>
@@ -734,7 +817,7 @@ export default function MerchantOnboarding({
                                 <div className="grid gap-4 rounded-lg border p-4 sm:grid-cols-2">
                                     {[
                                         [
-                                            'House / Unit / Building no.',
+                                            'House/Unit/Bldg/Floor',
                                             draft.house_unit_building,
                                         ],
                                         ['Street', draft.street],
@@ -745,7 +828,7 @@ export default function MerchantOnboarding({
                                         ],
                                         ['Province', draft.province],
                                         ['Region', draft.region],
-                                        ['Postal code', draft.postal_code],
+                                        ['ZIP code', draft.zip_code],
                                         ['Latitude', draft.latitude],
                                         ['Longitude', draft.longitude],
                                     ].map(([label, value]) => (
@@ -785,7 +868,7 @@ export default function MerchantOnboarding({
                                         confirmation
                                     </p>
                                 </div>
-                                <div className="rounded-lg border p-4">
+                                <div className="space-y-4 rounded-lg border p-4">
                                     <p className="text-muted-foreground font-medium">
                                         ID type
                                     </p>
@@ -795,7 +878,7 @@ export default function MerchantOnboarding({
                                         )}
                                     </p>
                                 </div>
-                                <div className="space-y-3">
+                                <div className="space-y-3 rounded-lg border p-4">
                                     <h4 className="font-semibold">Valid ID</h4>
                                     <div className="grid gap-4 sm:grid-cols-2">
                                         {[
@@ -823,7 +906,7 @@ export default function MerchantOnboarding({
                                         )}
                                     </div>
                                 </div>
-                                <div className="space-y-3">
+                                <div className="space-y-3 rounded-lg border p-4">
                                     <h4 className="font-semibold">
                                         Selfie capture
                                     </h4>
@@ -895,19 +978,6 @@ export default function MerchantOnboarding({
                                     )}
                                 </div>
                             </div>
-                            <Button
-                                type="button"
-                                className="w-full"
-                                disabled={submitted}
-                                onClick={() => {
-                                    setAgreedToPolicies(false);
-                                    setConfirmOpen(true);
-                                }}
-                            >
-                                {submitted
-                                    ? 'Submitting application…'
-                                    : 'Submit Merchant Application'}
-                            </Button>
                             <Dialog
                                 open={confirmOpen}
                                 onOpenChange={setConfirmOpen}
@@ -1063,7 +1133,7 @@ export default function MerchantOnboarding({
                     >
                         <ChevronLeft /> Back
                     </Button>
-                    {step < 4 && (
+                    {step < 4 ? (
                         <Button
                             type="button"
                             disabled={
@@ -1075,6 +1145,18 @@ export default function MerchantOnboarding({
                             onClick={nextStep}
                         >
                             {step === 3 ? 'Review application' : 'Continue'}{' '}
+                            <ChevronRight />
+                        </Button>
+                    ) : (
+                        <Button
+                            type="button"
+                            disabled={submitted}
+                            onClick={() => {
+                                setAgreedToPolicies(false);
+                                setConfirmOpen(true);
+                            }}
+                        >
+                            {submitted ? 'Submitting application…' : 'Submit Merchant Application'}{' '}
                             <ChevronRight />
                         </Button>
                     )}

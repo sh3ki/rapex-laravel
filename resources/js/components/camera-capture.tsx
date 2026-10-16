@@ -1,4 +1,4 @@
-import { Camera, RotateCcw, Video } from 'lucide-react';
+import { Camera, RotateCcw, Video, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { notify } from '@/lib/toast';
@@ -16,8 +16,9 @@ type Props = {
     instruction: string;
     facingMode?: 'user' | 'environment';
     value: File | null;
-    onChange: (file: File) => void;
+    onChange: (file: File | null) => void;
     required?: boolean;
+    initialPreview?: string;
 };
 
 export function CameraCapture({
@@ -27,6 +28,7 @@ export function CameraCapture({
     value,
     onChange,
     required = true,
+    initialPreview = '',
 }: Props) {
     const videoRef = useRef<HTMLVideoElement>(null);
     const streamRef = useRef<MediaStream | null>(null);
@@ -36,9 +38,11 @@ export function CameraCapture({
     const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
     const [deviceId, setDeviceId] = useState('');
     const [preview, setPreview] = useState('');
+    const [capturedFile, setCapturedFile] = useState<File | null>(null);
+    const [capturedPreview, setCapturedPreview] = useState('');
     useEffect(() => {
-        if (value) setPreview(URL.createObjectURL(value));
-    }, [value]);
+        setPreview(value ? URL.createObjectURL(value) : initialPreview);
+    }, [initialPreview, value]);
 
     const stop = () => {
         streamRef.current?.getTracks().forEach((track) => track.stop());
@@ -118,10 +122,17 @@ export function CameraCapture({
             notify.error(message);
             return;
         }
-        onChange(file);
-        setPreview(URL.createObjectURL(file));
-        setOpen(false);
+        setCapturedFile(file);
+        setCapturedPreview(URL.createObjectURL(file));
         stop();
+    };
+    const confirmCapture = () => {
+        if (!capturedFile) return;
+        onChange(capturedFile);
+        setPreview(capturedPreview);
+        setCapturedFile(null);
+        setCapturedPreview('');
+        setOpen(false);
     };
     return (
         <div className="space-y-2">
@@ -131,21 +142,24 @@ export function CameraCapture({
             </p>
             <div className="flex flex-col items-start gap-3">
                 {preview ? (
-                    <button
-                        type="button"
-                        className="group relative w-full max-w-sm cursor-zoom-in overflow-hidden rounded-md focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-                        onClick={() => setPreviewOpen(true)}
-                        aria-label={`View ${label} image in full size`}
-                    >
-                        <img
-                            src={preview}
-                            alt={`${label} preview`}
-                            className="aspect-[4/3] w-full rounded-md border object-cover"
-                        />
-                        <span className="absolute inset-0 flex items-center justify-center bg-black/45 text-sm text-white opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
-                            Click to enlarge
-                        </span>
-                    </button>
+                    <div className="relative w-full max-w-sm">
+                        <button
+                            type="button"
+                            className="group relative block w-full cursor-zoom-in overflow-hidden rounded-md focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                            onClick={() => setPreviewOpen(true)}
+                            aria-label={`View ${label} image in full size`}
+                        >
+                            <img
+                                src={preview}
+                                alt={`${label} preview`}
+                                className="aspect-[4/3] w-full rounded-md border object-cover"
+                            />
+                            <span className="absolute inset-0 flex items-center justify-center bg-black/45 text-sm text-white opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
+                                Click to enlarge
+                            </span>
+                        </button>
+                        <Button type="button" variant="destructive" size="icon" className="absolute top-2 right-2 size-8 rounded-full" onClick={() => { onChange(null); setPreview(''); }} aria-label={`Remove ${label} image`} title={`Remove ${label} image`}><X /></Button>
+                    </div>
                 ) : (
                     <div className="bg-muted text-muted-foreground flex aspect-[4/3] w-full max-w-sm items-center justify-center rounded-md border">
                         <Video />
@@ -156,6 +170,8 @@ export function CameraCapture({
                         type="button"
                         variant="outline"
                         onClick={() => {
+                            setCapturedFile(null);
+                            setCapturedPreview('');
                             setOpen(true);
                             void start();
                         }}
@@ -193,6 +209,7 @@ export function CameraCapture({
                         <DialogTitle>{label} capture</DialogTitle>
                         <DialogDescription>{instruction}</DialogDescription>
                     </DialogHeader>
+                    {capturedPreview ? <img src={capturedPreview} alt={`${label} captured preview`} className="mx-auto aspect-[4/3] max-h-[55vh] w-full rounded-md bg-black object-contain" /> : <>
                     {devices.length > 1 && (
                         <select
                             className="bg-background h-9 rounded-md border px-3 text-sm"
@@ -219,19 +236,9 @@ export function CameraCapture({
                         playsInline
                         className="mx-auto aspect-[4/3] max-h-[55vh] w-full rounded-md bg-black object-contain"
                     />
+                    </>}
                     <DialogFooter>
-                        <Button
-                            type="button"
-                            variant="outline"
-                            onClick={() => {
-                                void start();
-                            }}
-                        >
-                            <RotateCcw /> Try again
-                        </Button>
-                        <Button type="button" onClick={() => void capture()}>
-                            <Camera /> Confirm photo
-                        </Button>
+                        {capturedPreview ? <><Button type="button" variant="outline" onClick={() => { setCapturedFile(null); setCapturedPreview(''); void start(); }}><RotateCcw /> Retake</Button><Button type="button" onClick={confirmCapture}><Camera /> Confirm photo</Button></> : <Button type="button" onClick={() => void capture()}><Camera /> Capture</Button>}
                     </DialogFooter>
                 </DialogContent>
             </Dialog>

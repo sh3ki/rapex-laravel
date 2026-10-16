@@ -71,5 +71,6 @@ class DatabaseSeeder extends Seeder
         );
 
         $this->call(StoreClassificationSeeder::class);
+        $this->call(PhilippineAddressSeeder::class);
     }
 }
